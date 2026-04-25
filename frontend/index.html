@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAG Evaluation System</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --surface2: #21262d;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --teal: #01696f;
+      --teal-light: #02888e;
+      --teal-dim: rgba(1,105,111,0.15);
+      --green: #3fb950;
+      --yellow: #d29922;
+      --red: #f85149;
+      --radius: 8px;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header h1 { font-size: 1.25rem; font-weight: 600; }
+    header .subtitle { color: var(--text-muted); font-size: 0.85rem; margin-top: 2px; }
+    .logo {
+      width: 36px; height: 36px;
+      background: var(--teal);
+      border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 1rem;
+    }
+    .status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      margin-left: auto;
+    }
+    .status-dot.online { background: var(--green); }
+
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      padding: 0 24px;
+    }
+    .tab {
+      padding: 12px 20px;
+      cursor: pointer;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      border-bottom: 2px solid transparent;
+      transition: color .2s, border-color .2s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--teal-light); border-bottom-color: var(--teal-light); }
+
+    .tab-content { display: none; padding: 24px; max-width: 960px; margin: 0 auto; }
+    .tab-content.active { display: block; }
+
+    /* ── Ask tab ── */
+    .chat-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      min-height: 400px;
+      max-height: 520px;
+      overflow-y: auto;
+      padding: 16px;
+      margin-bottom: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .empty-state {
+      color: var(--text-muted);
+      text-align: center;
+      margin: auto;
+      font-size: 0.9rem;
+    }
+
+    .message { display: flex; flex-direction: column; gap: 6px; }
+    .message.user { align-items: flex-end; }
+    .message.assistant { align-items: flex-start; }
+
+    .bubble {
+      max-width: 85%;
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      font-size: 0.9rem;
+      line-height: 1.55;
+    }
+    .message.user .bubble {
+      background: var(--teal);
+      color: #fff;
+      border-bottom-right-radius: 2px;
+    }
+    .message.assistant .bubble {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 2px;
+    }
+
+    .scores-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      max-width: 85%;
+    }
+    .badge {
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-size: 0.73rem;
+      font-weight: 600;
+    }
+    .badge.green { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+    .badge.yellow { background: rgba(210,153,34,0.15); color: var(--yellow); border: 1px solid rgba(210,153,34,0.3); }
+    .badge.red { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
+
+    .sources-toggle {
+      cursor: pointer;
+      font-size: 0.78rem;
+      color: var(--teal-light);
+      max-width: 85%;
+    }
+    .sources-toggle:hover { text-decoration: underline; }
+    .sources-panel {
+      display: none;
+      max-width: 85%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px;
+    }
+    .sources-panel.open { display: block; }
+    .source-chunk {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      border-left: 2px solid var(--teal);
+      padding-left: 8px;
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+    .input-row input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      color: var(--text);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .input-row input:focus { border-color: var(--teal-light); }
+    .input-row input::placeholder { color: var(--text-muted); }
+
+    button {
+      background: var(--teal);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius);
+      padding: 10px 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s, opacity .2s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    button:hover { background: var(--teal-light); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    button.secondary:hover { background: var(--border); }
+
+    /* ── Eval tab ── */
+    .eval-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .eval-header h2 { font-size: 1.1rem; }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .metric-card .label { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 6px; }
+    .metric-card .value { font-size: 2rem; font-weight: 700; }
+    .metric-card .value.green { color: var(--green); }
+    .metric-card .value.yellow { color: var(--yellow); }
+    .metric-card .value.red { color: var(--red); }
+    .metric-card .value.muted { color: var(--text-muted); }
+
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 28px;
+    }
+    .chart-card h3 { font-size: 0.9rem; margin-bottom: 16px; color: var(--text-muted); }
+    .chart-wrap { height: 260px; position: relative; }
+
+    .table-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .table-card h3 {
+      padding: 14px 16px;
+      font-size: 0.9rem;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th {
+      text-align: left;
+      padding: 10px 14px;
+      background: var(--surface2);
+      color: var(--text-muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface2); }
+    .q-text { color: var(--text-muted); max-width: 260px; }
+
+    /* ── Spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg {
+      background: rgba(248,81,73,0.1);
+      border: 1px solid rgba(248,81,73,0.3);
+      color: var(--red);
+      padding: 10px 14px;
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+      margin-top: 12px;
+    }
+
+    .placeholder-text {
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      text-align: center;
+      padding: 40px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">R</div>
+  <div>
+    <h1>RAG Evaluation System</h1>
+    <div class="subtitle">Gemini 2.5 Flash · LangChain · ChromaDB · Ragas</div>
+  </div>
+  <div id="statusDot" class="status-dot" title="Checking health..."></div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('ask')">Ask Questions</div>
+  <div class="tab" onclick="switchTab('eval')">Evaluation Dashboard</div>
+</div>
+
+<!-- ── ASK TAB ── -->
+<div id="tab-ask" class="tab-content active">
+  <div id="chatContainer" class="chat-container">
+    <div class="empty-state">Ask a question about AI &amp; Machine Learning to get started.</div>
+  </div>
+  <div class="input-row">
+    <input id="questionInput" type="text" placeholder="e.g. What is RAG and why is it useful?" />
+    <button id="sendBtn" onclick="sendQuestion()">
+      <span id="sendLabel">Ask</span>
+    </button>
+  </div>
+  <div id="askError"></div>
+</div>
+
+<!-- ── EVAL TAB ── -->
+<div id="tab-eval" class="tab-content">
+  <div class="eval-header">
+    <div>
+      <h2>Ragas Evaluation Dashboard</h2>
+      <p style="color:var(--text-muted);font-size:0.82rem;margin-top:4px;">
+        Runs the built-in 10 QA pair test suite through Gemini judge.
+      </p>
+    </div>
+    <button id="runEvalBtn" onclick="runEvaluation()">
+      <span id="evalLabel">Run Full Evaluation</span>
+    </button>
+  </div>
+
+  <div id="metricsGrid" class="metrics-grid">
+    <div class="metric-card"><div class="label">Faithfulness</div><div id="m-faithfulness" class="value muted">—</div></div>
+    <div class="metric-card"><div class="label">Answer Relevancy</div><div id="m-answer_relevancy" class="value muted">—</div></div>
+    <div class="metric-card"><div class="label">Context Precision</div><div id="m-context_precision" class="value muted">—</div></div>
+    <div class="metric-card"><div class="label">Context Recall</div><div id="m-context_recall" class="value muted">—</div></div>
+  </div>
+
+  <div class="chart-card">
+    <h3>Metric Scores (0 – 1)</h3>
+    <div class="chart-wrap">
+      <canvas id="metricsChart"></canvas>
+    </div>
+  </div>
+
+  <div class="table-card">
+    <h3>Individual QA Pair Results</h3>
+    <div id="evalTable">
+      <div class="placeholder-text">Run the evaluation to see per-question scores.</div>
+    </div>
+  </div>
+  <div id="evalError"></div>
+</div>
+
+<script>
+  /* ── Utilities ── */
+  const API = '';
+  let chartInstance = null;
+
+  function switchTab(tab) {
+    document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', ['ask','eval'][i] === tab));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+  }
+
+  function scoreClass(v) {
+    if (v === null || v === undefined) return 'muted';
+    if (v >= 0.7) return 'green';
+    if (v >= 0.4) return 'yellow';
+    return 'red';
+  }
+
+  function badgeClass(v) { return scoreClass(v); }
+
+  function fmtScore(v) { return (v === null || v === undefined) ? '—' : (v * 100).toFixed(0) + '%'; }
+
+  /* ── Health check ── */
+  async function checkHealth() {
+    try {
+      const r = await fetch(API + '/api/health');
+      const d = await r.json();
+      const dot = document.getElementById('statusDot');
+      dot.classList.toggle('online', d.status === 'healthy' && d.pipeline_ready);
+      dot.title = `Status: ${d.status} | Docs: ${d.document_count} | Pipeline: ${d.pipeline_ready}`;
+    } catch {}
+  }
+  checkHealth();
+
+  /* ── Ask ── */
+  document.getElementById('questionInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) sendQuestion();
+  });
+
+  async function sendQuestion() {
+    const input = document.getElementById('questionInput');
+    const q = input.value.trim();
+    if (!q) return;
+
+    const container = document.getElementById('chatContainer');
+    document.getElementById('askError').innerHTML = '';
+
+    // Remove empty state
+    const empty = container.querySelector('.empty-state');
+    if (empty) empty.remove();
+
+    // User bubble
+    addMessage(container, 'user', q);
+    input.value = '';
+
+    // Loading bubble
+    const loadId = 'load-' + Date.now();
+    addMessage(container, 'assistant', '<span class="spinner"></span>', loadId);
+    container.scrollTop = container.scrollHeight;
+
+    const btn = document.getElementById('sendBtn');
+    btn.disabled = true;
+    document.getElementById('sendLabel').textContent = '…';
+
+    try {
+      const resp = await fetch(API + '/api/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || 'Request failed');
+
+      // Replace loading bubble
+      const loadEl = document.getElementById(loadId);
+      if (loadEl) loadEl.remove();
+
+      const msgEl = document.createElement('div');
+      msgEl.className = 'message assistant';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      bubble.textContent = data.answer;
+      msgEl.appendChild(bubble);
+
+      // Score badges
+      const eval_ = data.evaluation || {};
+      const badgeKeys = ['faithfulness','answer_relevancy','context_precision','context_recall'];
+      const scores = badgeKeys.filter(k => eval_[k] !== undefined);
+      if (scores.length) {
+        const row = document.createElement('div');
+        row.className = 'scores-row';
+        scores.forEach(k => {
+          const v = eval_[k];
+          const b = document.createElement('span');
+          b.className = 'badge ' + badgeClass(v);
+          b.title = k.replace(/_/g,' ');
+          b.textContent = k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) + ': ' + fmtScore(v);
+          row.appendChild(b);
+        });
+        msgEl.appendChild(row);
+      }
+
+      // Sources toggle
+      const chunks = data.context_chunks || [];
+      if (chunks.length) {
+        const toggle = document.createElement('div');
+        toggle.className = 'sources-toggle';
+        toggle.textContent = `▸ ${chunks.length} source chunk${chunks.length > 1 ? 's' : ''}`;
+        const panel = document.createElement('div');
+        panel.className = 'sources-panel';
+        chunks.forEach((c, i) => {
+          const d = document.createElement('div');
+          d.className = 'source-chunk';
+          d.textContent = c.length > 300 ? c.slice(0, 300) + '…' : c;
+          panel.appendChild(d);
+        });
+        toggle.onclick = () => {
+          panel.classList.toggle('open');
+          toggle.textContent = (panel.classList.contains('open') ? '▾' : '▸') +
+            ` ${chunks.length} source chunk${chunks.length > 1 ? 's' : ''}`;
+        };
+        msgEl.appendChild(toggle);
+        msgEl.appendChild(panel);
+      }
+
+      container.appendChild(msgEl);
+    } catch (err) {
+      const loadEl = document.getElementById(loadId);
+      if (loadEl) loadEl.remove();
+      document.getElementById('askError').innerHTML =
+        `<div class="error-msg">Error: ${err.message}</div>`;
+    } finally {
+      btn.disabled = false;
+      document.getElementById('sendLabel').textContent = 'Ask';
+      container.scrollTop = container.scrollHeight;
+    }
+  }
+
+  function addMessage(container, role, html, id) {
+    const el = document.createElement('div');
+    el.className = 'message ' + role;
+    if (id) el.id = id;
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.innerHTML = html;
+    el.appendChild(bubble);
+    container.appendChild(el);
+  }
+
+  /* ── Evaluation ── */
+  async function runEvaluation() {
+    const btn = document.getElementById('runEvalBtn');
+    btn.disabled = true;
+    document.getElementById('evalLabel').innerHTML = '<span class="spinner"></span> Running…';
+    document.getElementById('evalError').innerHTML = '';
+
+    try {
+      const resp = await fetch(API + '/api/evaluate', { method: 'POST' });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.detail || 'Evaluation failed');
+
+      const agg = data.aggregate || {};
+      renderMetricCards(agg);
+      renderChart(agg);
+      renderTable(data.individual || []);
+    } catch (err) {
+      document.getElementById('evalError').innerHTML =
+        `<div class="error-msg">Error: ${err.message}</div>`;
+    } finally {
+      btn.disabled = false;
+      document.getElementById('evalLabel').textContent = 'Run Full Evaluation';
+    }
+  }
+
+  function renderMetricCards(agg) {
+    ['faithfulness','answer_relevancy','context_precision','context_recall'].forEach(k => {
+      const el = document.getElementById('m-' + k);
+      const v = agg[k];
+      el.textContent = fmtScore(v);
+      el.className = 'value ' + scoreClass(v);
+    });
+  }
+
+  function renderChart(agg) {
+    const labels = ['Faithfulness','Answer Relevancy','Context Precision','Context Recall'];
+    const keys = ['faithfulness','answer_relevancy','context_precision','context_recall'];
+    const values = keys.map(k => agg[k] !== undefined ? parseFloat((agg[k]).toFixed(3)) : 0);
+    const colors = values.map(v => v >= 0.7 ? '#3fb950' : v >= 0.4 ? '#d29922' : '#f85149');
+
+    if (chartInstance) chartInstance.destroy();
+    const ctx = document.getElementById('metricsChart').getContext('2d');
+    chartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Score',
+          data: values,
+          backgroundColor: colors.map(c => c + '33'),
+          borderColor: colors,
+          borderWidth: 2,
+          borderRadius: 6,
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            min: 0, max: 1,
+            grid: { color: '#30363d' },
+            ticks: { color: '#8b949e', callback: v => (v * 100) + '%' }
+          },
+          x: { grid: { display: false }, ticks: { color: '#8b949e' } }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: ctx => ' ' + (ctx.raw * 100).toFixed(1) + '%' } }
+        }
+      }
+    });
+  }
+
+  function renderTable(pairs) {
+    if (!pairs.length) return;
+    const metricKeys = ['faithfulness','answer_relevancy','context_precision','context_recall'];
+    let html = `<table>
+      <thead><tr>
+        <th>#</th>
+        <th>Question</th>
+        <th>Faithfulness</th>
+        <th>Ans. Relevancy</th>
+        <th>Ctx. Precision</th>
+        <th>Ctx. Recall</th>
+      </tr></thead><tbody>`;
+
+    pairs.forEach((p, i) => {
+      html += `<tr>
+        <td>${i + 1}</td>
+        <td class="q-text">${escHtml(p.question)}</td>`;
+      metricKeys.forEach(k => {
+        const v = p[k];
+        const cls = badgeClass(v);
+        html += `<td><span class="badge ${cls}">${fmtScore(v)}</span></td>`;
+      });
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('evalTable').innerHTML = html;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+</script>
+</body>
+</html>
