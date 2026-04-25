@@ -35,22 +35,22 @@ Open http://localhost:8000 for the chat UI.
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/` | Serves the frontend SPA |
-| GET | `/api/health` | Status, doc count, pipeline readiness |
-| POST | `/api/query` | `{question}` → answer + Ragas scores |
-| POST | `/api/ingest` | `{file_paths}` → index documents |
-| POST | `/api/evaluate` | Run full batch evaluation on test set |
+| Method | Endpoint        | Description                           |
+| ------ | --------------- | ------------------------------------- |
+| GET    | `/`             | Serves the frontend SPA               |
+| GET    | `/api/health`   | Status, doc count, pipeline readiness |
+| POST   | `/api/query`    | `{question}` → answer + Ragas scores  |
+| POST   | `/api/ingest`   | `{file_paths}` → index documents      |
+| POST   | `/api/evaluate` | Run full batch evaluation on test set |
 
 ## Ragas Metrics
 
-| Metric | What it measures | Range |
-|--------|-----------------|-------|
-| **Faithfulness** | Is the answer supported by the retrieved context? | 0–1 |
-| **Answer Relevancy** | Does the answer directly address the question? | 0–1 |
-| **Context Precision** | Are the most relevant chunks ranked first? | 0–1 |
-| **Context Recall** | Does the retrieved context cover the ground truth? | 0–1 |
+| Metric                | What it measures                                   | Range |
+| --------------------- | -------------------------------------------------- | ----- |
+| **Faithfulness**      | Is the answer supported by the retrieved context?  | 0–1   |
+| **Answer Relevancy**  | Does the answer directly address the question?     | 0–1   |
+| **Context Precision** | Are the most relevant chunks ranked first?         | 0–1   |
+| **Context Recall**    | Does the retrieved context cover the ground truth? | 0–1   |
 
 Scores ≥ 0.7 = green (good), 0.4–0.7 = yellow (acceptable), < 0.4 = red (needs tuning).
 
@@ -59,17 +59,3 @@ Scores ≥ 0.7 = green (good), 0.4–0.7 = yellow (acceptable), < 0.4 = red (nee
 ```bash
 pytest tests/ -v
 ```
-
-## Resume Bullet Points
-
-- **Built production RAG system** using LangChain, ChromaDB, and Gemini 2.5 Flash with
-  automated Ragas evaluation (faithfulness, answer relevancy, context precision, recall),
-  reducing hallucination detection time from manual review to sub-second automated scoring
-
-- **Implemented end-to-end evaluation harness** with FastAPI REST API and real-time
-  per-query Ragas scoring, enabling continuous quality monitoring and A/B testing of
-  retrieval strategies (MMR search, chunk size tuning) in a production AI pipeline
-
-- **Delivered full-stack AI observability dashboard** with vanilla JS Chart.js frontend
-  surfacing Ragas metric trends and per-question quality breakdowns, providing
-  non-technical stakeholders visibility into LLM answer quality and retrieval performance
