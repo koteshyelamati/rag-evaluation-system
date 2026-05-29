@@ -2,62 +2,43 @@ name: CI
 
 on:
   push:
-      branches: ["main"]
-        pull_request:
-            branches: ["main"]
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
 
-            jobs:
-              test:
-                  name: Lint & Test (Python ${{ matrix.python-version }})
-                      runs-on: ubuntu-latest
-
-                          strategy:
-                                fail-fast: false
-                                      matrix:
-                                              python-version: ["3.11", "3.12"]
-
-                                                  steps:
-                                                        # ── Checkout ────────────────────────────────────────────────────
-                                                              - name: Checkout repository
-                                                                      uses: actions/checkout@v4
-
-                                                                            # ── Python setup ────────────────────────────────────────────────
-                                                                                  - name: Set up Python ${{ matrix.python-version }}
-                                                                                          uses: actions/setup-python@v5
-                                                                                                  with:
-                                                                                                            python-version: ${{ matrix.python-version }}
-                                                                                                                      cache: "pip"
-                                                                                                                      
-                                                                                                                            # ── Dependencies ────────────────────────────────────────────────
-                                                                                                                                  - name: Install dependencies
-                                                                                                                                          run: |
-                                                                                                                                                    python -m pip install --upgrade pip
-                                                                                                                                                              pip install -r requirements.txt
-                                                                                                                                                                        pip install pytest-cov
-                                                                                                                                                                        
-                                                                                                                                                                              # ── Env stub ────────────────────────────────────────────────────
-                                                                                                                                                                                    # Tests use mocked dependencies; a placeholder key satisfies
-                                                                                                                                                                                          # pydantic-settings validation without making real API calls.
-                                                                                                                                                                                                - name: Create .env stub for tests
-                                                                                                                                                                                                        run: |
-                                                                                                                                                                                                                  echo "GEMINI_API_KEY=test-key-stub" > .env
-                                                                                                                                                                                                                            echo "CHROMA_PERSIST_DIR=./chroma_db_test" >> .env
-                                                                                                                                                                                                                                      echo "COLLECTION_NAME=rag_docs_test" >> .env
-                                                                                                                                                                                                                                      
-                                                                                                                                                                                                                                            # ── Tests ───────────────────────────────────────────────────────
-                                                                                                                                                                                                                                                  - name: Run pytest with coverage
-                                                                                                                                                                                                                                                          run: |
-                                                                                                                                                                                                                                                                    pytest tests/ -v \
-                                                                                                                                                                                                                                                                                --cov=app \
-                                                                                                                                                                                                                                                                                            --cov-report=term-missing \
-                                                                                                                                                                                                                                                                                                        --cov-report=xml:coverage.xml \
-                                                                                                                                                                                                                                                                                                                    --tb=short
-                                                                                                                                                                                                                                                                                                                    
-                                                                                                                                                                                                                                                                                                                          # ── Upload coverage ─────────────────────────────────────────────
-                                                                                                                                                                                                                                                                                                                                - name: Upload coverage report
-                                                                                                                                                                                                                                                                                                                                        uses: actions/upload-artifact@v4
-                                                                                                                                                                                                                                                                                                                                                if: matrix.python-version == '3.11'
-                                                                                                                                                                                                                                                                                                                                                        with:
-                                                                                                                                                                                                                                                                                                                                                                  name: coverage-report
-                                                                                                                                                                                                                                                                                                                                                                            path: coverage.xml
-                                                                                                                                                                                                                                                                                                                                                                                      retention-days: 7
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest-cov
+      - name: Create env stub
+        run: |
+          echo "GEMINI_API_KEY=test-key-stub" > .env
+          echo "CHROMA_PERSIST_DIR=./chroma_db_test" >> .env
+          echo "COLLECTION_NAME=rag_docs_test" >> .env
+      - name: Run pytest
+        run: |
+          pytest tests/ -v --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --tb=short
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: matrix.python-version == '3.11'
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 7
