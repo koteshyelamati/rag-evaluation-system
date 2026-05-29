@@ -15,145 +15,170 @@ logger = logging.getLogger(__name__)
 _rag_pipeline = None
 _evaluator = None
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _rag_pipeline, _evaluator
-    logger.info("Starting RAG Evaluation System...")
+        global _rag_pipeline, _evaluator
+        logger.info("Starting RAG Evaluation System...")
 
     from app.document_loader import get_document_count, load_sample_data
     from app.rag_pipeline import RAGPipeline
     from app.evaluator import RAGEvaluator
 
     if settings.GEMINI_API_KEY:
-        try:
-            doc_count = get_document_count()
-            if doc_count == 0:
-                logger.info("Vector store is empty — loading sample data...")
-                load_sample_data()
-        except Exception as exc:
-            logger.warning("Could not check/load sample data: %s", exc)
+                try:
+                                doc_count = get_document_count()
+                                if doc_count == 0:
+                                                    logger.info("Vector store is empty — loading sample data...")
+                                                    load_sample_data()
+                except Exception as exc:
+                                logger.warning("Could not check/load sample data: %s", exc)
 
-        try:
-            _rag_pipeline = RAGPipeline()
-            _evaluator = RAGEvaluator()
-            logger.info("RAG pipeline and evaluator ready.")
-        except Exception as exc:
+                try:
+                                _rag_pipeline = RAGPipeline()
+                                _evaluator = RAGEvaluator()
+                                logger.info("RAG pipeline and evaluator ready.")
+except Exception as exc:
             logger.error("Failed to initialize pipeline: %s", exc)
-    else:
+else:
         logger.warning("GEMINI_API_KEY not set — pipeline not initialized.")
 
     yield
     logger.info("Shutting down...")
 
-
 app = FastAPI(
-    title="RAG Evaluation System",
-    description="Production RAG with Ragas evaluation — powered by Gemini + LangChain",
-    version="1.0.0",
-    lifespan=lifespan,
+        title="RAG Evaluation System",
+        description="Production RAG with Ragas evaluation — powered by Gemini + LangChain",
+        version="1.0.0",
+        lifespan=lifespan,
 )
 
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:8000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+        CORSMiddleware,
+        allow_origins=["http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:8000"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
 )
-
 
 # ── Request/response models ──────────────────────────────────────────────────
 
 class QueryRequest(BaseModel):
-    question: str
-
+        question: str
 
 class IngestRequest(BaseModel):
-    file_paths: list[str]
-
+        file_paths: list[str]
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_frontend():
-    index = Path(__file__).parent.parent / "frontend" / "index.html"
-    if not index.exists():
-        raise HTTPException(status_code=404, detail="Frontend not found")
-    return HTMLResponse(content=index.read_text(encoding="utf-8"))
-
+        index = Path(__file__).parent.parent / "frontend" / "index.html"
+        if not index.exists():
+                    raise HTTPException(status_code=404, detail="Frontend not found")
+                return HTMLResponse(content=index.read_text(encoding="utf-8"))
 
 @app.get("/api/health")
 async def health():
-    from app.document_loader import get_document_count
+        from app.document_loader import get_document_count
 
     doc_count = 0
     try:
-        doc_count = get_document_count()
-    except Exception:
+                doc_count = get_document_count()
+except Exception:
         pass
 
-    return {
-        "status": "healthy",
-        "document_count": doc_count,
-        "pipeline_ready": _rag_pipeline is not None,
-        "evaluator_ready": _evaluator is not None,
-    }
+    cache_stats: dict = {}
+    if _rag_pipeline is not None:
+                try:
+                                cache_stats = _rag_pipeline.cache_stats()
+except Exception:
+            pass
 
+    return {
+                "status": "healthy",
+                "document_count": doc_count,
+                "pipeline_ready": _rag_pipeline is not None,
+                "evaluator_ready": _evaluator is not None,
+                "cache": cache_stats,
+    }
 
 @app.post("/api/query")
 async def query(request: QueryRequest):
-    if not _rag_pipeline:
-        raise HTTPException(
-            status_code=503,
-            detail="Pipeline not ready. Check GEMINI_API_KEY and restart.",
-        )
+        if not _rag_pipeline:
+                    raise HTTPException(
+                                    status_code=503,
+                                    detail="Pipeline not ready. Check GEMINI_API_KEY and restart.",
+                    )
 
     rag_result = _rag_pipeline.query(request.question)
 
     eval_scores: dict = {}
     if _evaluator and rag_result["context_chunks"]:
-        try:
-            eval_scores = _evaluator.evaluate_single(
-                question=request.question,
-                answer=rag_result["answer"],
-                contexts=rag_result["context_chunks"],
-            )
-        except Exception as exc:
-            logger.warning("Evaluation failed for query: %s", exc)
+                try:
+                                eval_scores = _evaluator.evaluate_single(
+                                                    question=request.question,
+                                                    answer=rag_result["answer"],
+                                                    contexts=rag_result["context_chunks"],
+                                )
+except Exception as exc:
+            logger.warning("Evaluation failed: %s", exc)
 
     return {
-        "answer": rag_result["answer"],
-        "source_documents": rag_result["source_documents"],
-        "context_chunks": rag_result["context_chunks"],
-        "evaluation": eval_scores,
+                "answer": rag_result["answer"],
+                "source_documents": rag_result["source_documents"],
+                "evaluation": eval_scores,
     }
-
 
 @app.post("/api/ingest")
 async def ingest(request: IngestRequest):
-    if not settings.GEMINI_API_KEY:
-        raise HTTPException(status_code=503, detail="GEMINI_API_KEY not configured.")
+        if not _rag_pipeline:
+                    raise HTTPException(status_code=503, detail="Pipeline not ready.")
 
-    from app.document_loader import load_and_index_documents
+        from app.document_loader import load_and_index_documents
 
     try:
-        count = load_and_index_documents(request.file_paths)
-        return {"status": "success", "chunks_indexed": count}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
+                count = load_and_index_documents(request.file_paths)
+                # Invalidate cache so stale answers are not served after new docs
+                _rag_pipeline.clear_cache()
+                return {"message": f"Ingested {count} document chunks.", "chunk_count": count}
+except Exception as exc:
+            logger.error("Ingestion failed: %s", exc)
+            raise HTTPException(status_code=500, detail=str(exc))
 
 @app.post("/api/evaluate")
 async def evaluate():
-    if not _evaluator:
-        raise HTTPException(
-            status_code=503,
-            detail="Evaluator not ready. Check GEMINI_API_KEY and restart.",
-        )
-
-    try:
-        results = _evaluator.evaluate_batch()
-        return results
-    except Exception as exc:
+        if not _evaluator:
+                    raise HTTPException(status_code=503, detail="Evaluator not ready.")
+                try:
+                            result = _evaluator.evaluate_batch()
+                            return result
+except Exception as exc:
+        logger.error("Batch evaluation failed: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+# ── Cache management endpoints ───────────────────────────────────────────────
+
+@app.get("/api/cache/stats")
+async def cache_stats():
+        """Return query cache hit/miss statistics and current size."""
+    if not _rag_pipeline:
+                raise HTTPException(status_code=503, detail="Pipeline not ready.")
+            return _rag_pipeline.cache_stats()
+
+@app.post("/api/cache/clear")
+async def cache_clear():
+        """Flush the entire query cache.
+
+            Useful after ingesting new documents to ensure fresh answers are served.
+                Returns the cache statistics captured just before clearing.
+                    """
+    if not _rag_pipeline:
+                raise HTTPException(status_code=503, detail="Pipeline not ready.")
+            stats_before = _rag_pipeline.cache_stats()
+    _rag_pipeline.clear_cache()
+    logger.info("Query cache cleared via API. Previous stats: %s", stats_before)
+    return {
+                "message": "Query cache cleared successfully.",
+                "cleared_entries": stats_before.get("size", 0),
+                "previous_stats": stats_before,
+    }
